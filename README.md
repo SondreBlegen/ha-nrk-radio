@@ -34,7 +34,8 @@ Loaded automatically by the integration; no resource to add.
 ```yaml
 type: custom:nrk-radio-card
 show: series/doedens-budbaerer     # lock to one series or podcast
-speaker: media_player.kitchen  # optional: always play here (else a dropdown)
+speaker: media_player.kitchen      # optional: always play here (else a dropdown)
+episodes: 5                        # optional: rows shown before "Show all"
 ```
 
 Leave out `show` and the card becomes a library browser with search.

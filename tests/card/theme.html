@@ -1,0 +1,123 @@
+<!doctype html>
+<!--
+  The card inside a Frosted-Glass-Dark-styled room section at phone width, next
+  to Mushroom-like tiles, to check it blends in. Uses fixtures.js + harness.js.
+  ?state=idle|playing
+-->
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NRK card in theme</title>
+<style>
+  :root {
+    --primary-color: rgb(106, 116, 211); --token-rgb-primary: 106, 116, 211;
+    --primary-text-color: rgba(234, 235, 238, 0.98); --secondary-text-color: rgba(234, 235, 238, 0.8);
+    --rgb-primary-text-color: 234, 235, 238; --divider-color: rgba(84, 84, 98, 0.28);
+    --ha-card-border-radius: 18px; --ha-card-border-width: 0.5px; --ha-card-border-color: rgba(234, 235, 238, 0.1);
+    --ha-card-box-shadow: 0 12px 20px rgba(0, 0, 0, 0.28); --ha-card-background: rgba(30, 30, 30, 0.1);
+    --ha-card-glass-tint: rgba(28, 29, 33, 0.18); --ha-card-backdrop-filter: blur(10px) saturate(1.2);
+    --ha-card-glass-inset-shadow: 3px 3px 0.5px -3.5px rgba(255,255,255,0.15) inset, -2px -2px 0.5px -2px rgba(255,255,255,0.1) inset, 0 0 8px 1px rgba(255,255,255,0.06) inset, 0 0 2px 0 rgba(0,0,0,0.18);
+    --switch-checked-button-color: rgb(106, 116, 211); --switch-checked-track-color: rgb(106, 116, 211);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { margin: 0; min-height: 100vh; color: var(--primary-text-color);
+         background: center / cover no-repeat fixed url('https://cdn.jsdelivr.net/gh/wessamlauf/homeassistant-frosted-glass-themes@refs/heads/main/themes/frosted-glass-dark-background.jpg') #15161c; }
+  .phone { width: 390px; margin: 0 auto; padding: 16px 8px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; }
+  h1 { font-size: 33px; font-weight: 700; margin: 16px 8px 8px; display: flex; gap: 10px; align-items: center; }
+  /* Mushroom-ish reference tiles */
+  .mush { display: flex; align-items: center; gap: 12px; padding: 12px; }
+  .mush .ic { width: 40px; height: 40px; border-radius: 50%; background: rgba(234,235,238,0.06); display: flex; align-items: center; justify-content: center; color: rgba(234,235,238,0.75); }
+  .mush .p { font-size: 14px; font-weight: 500; line-height: 20px; }
+  .mush .s { font-size: 12px; line-height: 16px; color: var(--secondary-text-color); letter-spacing: 0.4px; }
+</style>
+<script>
+  // The theme's card-mod "card-mod-card" glass layer, applied to every ha-card.
+  const GLASS = `
+    :host { display: block; position: relative; isolation: isolate; border-radius: var(--ha-card-border-radius);
+            border: var(--ha-card-border-width) solid var(--ha-card-border-color); box-shadow: var(--ha-card-box-shadow);
+            background: transparent; }
+    :host::before { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: -1; pointer-events: none;
+            background: var(--ha-card-glass-tint); backdrop-filter: var(--ha-card-backdrop-filter);
+            -webkit-backdrop-filter: var(--ha-card-backdrop-filter); box-shadow: var(--ha-card-glass-inset-shadow); }`;
+  customElements.define("ha-card", class extends HTMLElement {
+    constructor() { super(); this.attachShadow({ mode: "open" }).innerHTML = `<style>${GLASS}</style><slot></slot>`; }
+  });
+  customElements.define("ha-switch", class extends HTMLElement {
+    connectedCallback() {
+      if (this._b) return;
+      this.style.cssText = "display:inline-block;width:36px;height:20px;border-radius:10px;position:relative;cursor:pointer;flex:none";
+      this._b = document.createElement("span");
+      this._b.style.cssText = "position:absolute;top:2px;width:16px;height:16px;border-radius:50%;transition:left .15s";
+      this.appendChild(this._b);
+      this.addEventListener("click", () => { this.checked = !this.checked; this.dispatchEvent(new Event("change")); });
+      this._paint();
+    }
+    set checked(v) { this._c = Boolean(v); this._paint(); }
+    get checked() { return Boolean(this._c); }
+    _paint() {
+      if (!this._b) return;
+      this.style.background = this._c ? "rgba(106,116,211,0.55)" : "rgba(234,235,238,0.18)";
+      this._b.style.background = this._c ? "rgb(106,116,211)" : "rgba(234,235,238,0.6)";
+      this._b.style.left = this._c ? "18px" : "2px";
+    }
+  });
+</script>
+<script src="fixtures.js"></script>
+<script src="../../custom_components/nrk_radio/nrk-radio-card.js"></script>
+</head>
+<body>
+<div class="phone">
+  <h1>🧸 Kids bedroom</h1>
+  <ha-card><div class="mush"><div class="ic">💡</div><div><div class="p">Room dimmer</div><div class="s">Off</div></div></div></ha-card>
+  <ha-card><div class="mush"><div class="ic">🔈</div><div><div class="p">Speaker</div><div class="s">Off</div></div></div></ha-card>
+  <ha-card><div class="mush"><div class="ic">🚪</div><div><div class="p">Door closed</div><div class="s">Mon 12 Oct, 20:33 · 14 minutes ago</div></div></div></ha-card>
+  <div id="slot"></div>
+</div>
+<script>
+  const P = "media-source://nrk_radio";
+  const SHOW = "podcast/fantorangens_vitseshow";
+  const eps = FIXTURES.browse[`${P}/${SHOW}`].children;
+  const sim = { state: "idle", queue: [], pos: 0, keep: false };
+  if (new URLSearchParams(location.search).get("state") === "playing") {
+    sim.state = "playing"; sim.queue = [refOf(eps[0]), refOf(eps[2]), refOf(eps[3])]; sim.keep = true;
+  }
+  function refOf(c) { return c.media_content_id.replace(P + "/", ""); }
+  const title = (ref) => (eps.find((c) => refOf(c) === ref) || { title: ref }).title.replace(/^\d\d\.\d\d\.\d\d · /, "");
+  function hass() {
+    return {
+      language: "nb", locale: { language: "nb" },
+      entities: {
+        "media_player.nrk_radio": { entity_id: "media_player.nrk_radio", platform: "nrk_radio", device_id: "d" },
+        "switch.nrk_radio_keep_playing": { entity_id: "switch.nrk_radio_keep_playing", platform: "nrk_radio", device_id: "d" },
+        "select.nrk_radio_speaker": { entity_id: "select.nrk_radio_speaker", platform: "nrk_radio", device_id: "d" },
+      },
+      states: {
+        "media_player.nrk_radio": { state: sim.state, attributes: { speaker: "media_player.livingroom_speaker",
+          queue: sim.queue.map((r) => ({ id: r, title: title(r) })), queue_position: sim.queue.length ? sim.pos : null,
+          media_title: sim.queue.length ? title(sim.queue[sim.pos]) : undefined } },
+        "media_player.livingroom_speaker": { state: "off", attributes: { friendly_name: "Kids speaker" } },
+        "switch.nrk_radio_keep_playing": { state: sim.keep ? "on" : "off", attributes: {} },
+        "select.nrk_radio_speaker": { state: "Kids speaker", attributes: { options: ["Kids speaker"] } },
+      },
+      callWS: async (m) => m.type === "media_player/browse_media" ? FIXTURES.browse[m.media_content_id] : { result: [] },
+      callService: async (d, s, data) => {
+        const ref = data.media_content_id && data.media_content_id.replace(P + "/", "");
+        if (s === "play_media" && data.enqueue) sim.queue.push(ref);
+        else if (s === "play_media") { sim.queue = [ref.startsWith("podcast/") ? refOf(eps[0]) : ref]; sim.pos = 0; sim.state = "playing"; }
+        else if (s === "media_play_pause") sim.state = sim.state === "playing" ? "paused" : "playing";
+        else if (s === "media_stop") sim.state = "idle";
+        else if (s === "turn_on" || s === "turn_off") sim.keep = s === "turn_on";
+        else if (s === "clear_playlist") sim.queue = sim.queue.slice(0, sim.pos + 1);
+        card.hass = hass();
+      },
+    };
+  }
+  const card = document.createElement("nrk-radio-card");
+  card.setConfig({ show: SHOW, speaker: "media_player.livingroom_speaker" });
+  document.getElementById("slot").appendChild(card);
+  card.hass = hass();
+</script>
+</body>
+</html>

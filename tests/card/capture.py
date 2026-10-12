@@ -13,7 +13,7 @@ from custom_components.nrk_radio.api import NrkApi
 from custom_components.nrk_radio.media_source import _node, browse
 
 PREFIX = "media-source://nrk_radio"
-BROWSE = ["", "favourites", "series/nyhetsmorgen", "series/doedens-budbaerer", "podcast/dagsnytt_atten", "page/hoerespill", "section/hoerespill/1"]
+BROWSE = ["", "favourites", "podcast/fantorangens_vitseshow", "series/nyhetsmorgen", "series/doedens-budbaerer", "podcast/dagsnytt_atten", "page/hoerespill", "section/hoerespill/1"]
 FAVOURITES = ["podcast/dagsnytt_atten", "series/nyhetsmorgen", "series/doedens-budbaerer"]
 
 
