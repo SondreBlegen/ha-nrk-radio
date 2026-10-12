@@ -5,6 +5,7 @@ from __future__ import annotations
 from homeassistant.components.select import SelectEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
@@ -27,8 +28,16 @@ class SpeakerSelect(NrkEntity, SelectEntity, RestoreEntity):
         self._attr_unique_id = f"{entry_id}_speaker"
 
     def _name(self, entity_id: str) -> str:
-        state = self.hass.states.get(entity_id)
-        return (state and state.name) or entity_id
+        if state := self.hass.states.get(entity_id):
+            return state.name
+        # Cast groups have no state until a member is online; use the registry's name.
+        if entry := er.async_get(self.hass).async_get(entity_id):
+            if name := entry.name or entry.original_name:
+                return name
+            if entry.device_id and (device := dr.async_get(self.hass).async_get(entry.device_id)):
+                if name := device.name_by_user or device.name:
+                    return name
+        return entity_id.split(".", 1)[1].replace("_", " ").capitalize()
 
     @property
     def options(self) -> list[str]:

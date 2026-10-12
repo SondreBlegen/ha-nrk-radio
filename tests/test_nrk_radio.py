@@ -247,6 +247,14 @@ async def test_switching_speaker_moves_playback(hass: HomeAssistant, setup, spea
     assert hass.states.get(PLAYER).state == "playing"
 
 
+async def test_speaker_without_state_gets_a_readable_name(hass: HomeAssistant, setup) -> None:
+    """Cast groups have no state while their members are offline."""
+    controller = setup.runtime_data
+    controller.speakers.append("media_player.all_speakers")
+    await _service(hass, "switch", "turn_on", entity_id=KEEP)  # any update re-renders the select
+    assert "All speakers" in hass.states.get("select.nrk_radio_speaker").attributes["options"]
+
+
 async def test_card_speaker_replaces_without_moving(hass: HomeAssistant, setup, speakers) -> None:
     await _play(hass, "episode/podcast/pod/e1")
     await _play(hass, "episode/podcast/pod/e2", extra={"speaker": LIVING})
