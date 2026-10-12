@@ -1,0 +1,13 @@
+remove_from_queue:
+  target:
+    entity:
+      integration: nrk_radio
+      domain: media_player
+  fields:
+    position:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 500
+          mode: box

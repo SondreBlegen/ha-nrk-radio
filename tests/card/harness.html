@@ -1,0 +1,132 @@
+<!doctype html>
+<!--
+  Renders nrk-radio-card against captured NRK data (fixtures.js) and a fake
+  `hass` that mimics the integration's queue behaviour. Open in a browser.
+  ?show=series/doedens-budbaerer  lock to a show   ?speaker=media_player.kitchen  fixed speaker
+-->
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NRK Radio card harness</title>
+<style>
+  :root { --primary-color: #03a9f4; --rgb-primary-color: 3, 169, 244; --primary-text-color: #e1e1e1;
+          --secondary-text-color: #9b9b9b; --secondary-background-color: #2a2d33; --divider-color: #3a3d44;
+          --card-background-color: #1c1f24; }
+  body { background: #111317; color: var(--primary-text-color); font-family: Roboto, system-ui, sans-serif; margin: 0; padding: 16px; }
+  .wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 420px)); gap: 16px; }
+  ha-card { display: block; background: var(--card-background-color); border-radius: 12px; }
+  #log { font: 12px monospace; color: #8a8; white-space: pre-wrap; margin-top: 12px; max-height: 160px; overflow: auto; }
+</style>
+<script src="fixtures.js"></script>
+<script>
+  // Minimal stand-ins for HA's own elements.
+  customElements.define("ha-card", class extends HTMLElement {});
+  customElements.define("ha-switch", class extends HTMLElement {
+    connectedCallback() {
+      if (this._box) return;
+      this._box = document.createElement("input");
+      this._box.type = "checkbox";
+      // Like the real ha-switch: one change event from the host, none leaking from inside.
+      this._box.addEventListener("change", (ev) => {
+        ev.stopPropagation();
+        this.checked = this._box.checked;
+        this.dispatchEvent(new Event("change"));
+      });
+      this.appendChild(this._box);
+    }
+    set checked(v) { this._checked = v; if (this._box) this._box.checked = v; }
+    get checked() { return this._checked; }
+  });
+</script>
+<script src="../../custom_components/nrk_radio/nrk-radio-card.js"></script>
+</head>
+<body>
+<div class="wrap" id="cards"></div>
+<div id="log"></div>
+<script>
+  const P = "media-source://nrk_radio";
+  const SPEAKERS = { "media_player.kitchen": "Kitchen display", "media_player.living": "Living room speaker" };
+  const log = (m) => { const el = document.getElementById("log"); el.textContent = m + "\n" + el.textContent; };
+
+  // Fake integration state
+  const sim = { state: "idle", queue: [], pos: 0, speaker: "media_player.kitchen", keep: false };
+  const titleOf = (ref) => {
+    for (const node of Object.values(FIXTURES.browse)) {
+      for (const c of node.children || []) if (c.media_content_id === `${P}/${ref}`) return [c.title, node.title, c.thumbnail];
+    }
+    return [ref, "NRK", null];
+  };
+
+  function makeHass() {
+    const cur = sim.queue[sim.pos];
+    const states = {
+      "media_player.nrk_radio": { entity_id: "media_player.nrk_radio", state: sim.state, attributes: {
+        friendly_name: "NRK Radio", speaker: sim.speaker, keep_playing: sim.keep,
+        queue: sim.queue.map((r) => ({ id: r, title: titleOf(r)[0], artist: titleOf(r)[1] })),
+        queue_position: sim.queue.length ? sim.pos : null,
+        media_title: cur ? titleOf(cur)[0] : undefined, media_artist: cur ? titleOf(cur)[1] : undefined,
+        entity_picture: cur ? titleOf(cur)[2] : undefined } },
+      "select.nrk_radio_speaker": { entity_id: "select.nrk_radio_speaker", state: SPEAKERS[sim.speaker],
+        attributes: { options: Object.values(SPEAKERS) } },
+      "switch.nrk_radio_keep_playing": { entity_id: "switch.nrk_radio_keep_playing", state: sim.keep ? "on" : "off", attributes: {} },
+    };
+    for (const [id, name] of Object.entries(SPEAKERS)) states[id] = { entity_id: id, state: "idle", attributes: { friendly_name: name } };
+    const entities = {};
+    for (const id of Object.keys(states)) if (!id.startsWith("media_player.k") && !id.startsWith("media_player.l"))
+      entities[id] = { entity_id: id, platform: "nrk_radio", device_id: "dev1" };
+    return {
+      states, entities, language: "nb", locale: { language: "nb" },
+      callWS: async (msg) => {
+        await new Promise((r) => setTimeout(r, 150));
+        if (msg.type === "media_player/browse_media") {
+          const node = FIXTURES.browse[msg.media_content_id];
+          if (!node) throw new Error("not captured: " + msg.media_content_id);
+          return node;
+        }
+        if (msg.type === "media_player/search_media") return FIXTURES.search.krim;
+        throw new Error(msg.type);
+      },
+      callService: async (domain, service, data, target) => {
+        log(`${domain}.${service} ${JSON.stringify(data)} → ${target.entity_id}`);
+        const ref = data.media_content_id ? data.media_content_id.replace(P + "/", "") : null;
+        if (service === "play_media") {
+          if (data.extra?.speaker) sim.speaker = data.extra.speaker;
+          const live = ref.startsWith("channel/");
+          if (live || !data.enqueue || !sim.queue.length) { sim.queue = [ref]; sim.pos = 0; sim.state = "playing"; }
+          else { sim.queue.push(ref); if (sim.state === "idle") { sim.pos = sim.queue.length - 1; sim.state = "playing"; } }
+        } else if (service === "media_pause") sim.state = "paused";
+        else if (service === "media_play") sim.state = "playing";
+        else if (service === "media_play_pause") sim.state = sim.state === "playing" ? "paused" : "playing";
+        else if (service === "media_stop") sim.state = "idle";
+        else if (service === "media_next_track" && sim.pos + 1 < sim.queue.length) sim.pos++;
+        else if (service === "media_previous_track" && sim.pos > 0) sim.pos--;
+        else if (service === "clear_playlist") sim.queue = sim.queue.slice(0, sim.pos + 1);
+        else if (service === "remove_from_queue") sim.queue.splice(data.position, 1);
+        else if (service === "turn_on" || service === "turn_off") sim.keep = service === "turn_on";
+        else if (service === "select_option") sim.speaker = Object.keys(SPEAKERS).find((k) => SPEAKERS[k] === data.option);
+        push();
+      },
+    };
+  }
+
+  const params = new URLSearchParams(location.search);
+  const configs = params.has("show") || params.has("speaker")
+    ? [{ show: params.get("show") || undefined, speaker: params.get("speaker") || undefined }]
+    : [{ show: "series/doedens-budbaerer", speaker: "media_player.kitchen" }, {}];
+  const cards = configs.map((cfg) => {
+    const card = document.createElement("nrk-radio-card");
+    card.setConfig(Object.fromEntries(Object.entries(cfg).filter(([, v]) => v)));
+    document.getElementById("cards").appendChild(card);
+    return card;
+  });
+  function push() { const h = makeHass(); cards.forEach((c) => { c.hass = h; }); }
+  push();
+  // Simulate "episode finished": ?finish → advance or stop like the integration.
+  window.finishEpisode = () => {
+    if (sim.pos + 1 < sim.queue.length) sim.pos++; else sim.state = "idle";
+    push();
+  };
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+﻿__pycache__/
+*.pyc
+.pytest_cache/
+# Captured NRK responses for the card harness; regenerate with tests/card/capture.py
+tests/card/fixtures.json
+tests/card/fixtures.js

@@ -1,0 +1,16 @@
+{
+    "domain": "nrk_radio",
+    "name": "NRK Radio",
+    "after_dependencies": ["cast"],
+    "codeowners": ["@sondreblegen"],
+    "config_flow": true,
+    "dependencies": ["frontend", "http", "media_source"],
+    "documentation": "https://github.com/sondreblegen/ha-nrk-radio",
+    "integration_type": "service",
+    "iot_class": "cloud_polling",
+    "issue_tracker": "https://github.com/sondreblegen/ha-nrk-radio/issues",
+    "loggers": ["custom_components.nrk_radio"],
+    "requirements": [],
+    "single_config_entry": true,
+    "version": "0.2.0"
+}

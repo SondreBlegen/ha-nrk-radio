@@ -1,0 +1,72 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "NRK Radio",
+                "description": "Choose the speakers NRK can play on, and your favourites. Favourites become one-tap buttons and appear first in the media browser.",
+                "data": {
+                    "speakers": "Speakers",
+                    "shows": "Favourite series and podcasts",
+                    "channels": "Favourite live channels"
+                },
+                "data_description": {
+                    "shows": "A radio.nrk.no link or an id, e.g. https://radio.nrk.no/serie/nyhetsmorgen or dagsnytt_atten",
+                    "channels": "Next/previous steps through these while live radio plays."
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Could not reach NRK.",
+            "unknown_show": "NRK has no series or podcast with that id.",
+            "no_speakers": "Pick at least one speaker."
+        },
+        "abort": {
+            "single_instance_allowed": "NRK Radio is already set up."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "NRK Radio",
+                "data": {
+                    "speakers": "Speakers",
+                    "shows": "Favourite series and podcasts",
+                    "channels": "Favourite live channels"
+                },
+                "data_description": {
+                    "shows": "A radio.nrk.no link or an id, e.g. https://radio.nrk.no/serie/nyhetsmorgen or dagsnytt_atten",
+                    "channels": "Next/previous steps through these while live radio plays."
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Could not reach NRK.",
+            "unknown_show": "NRK has no series or podcast with that id.",
+            "no_speakers": "Pick at least one speaker."
+        }
+    },
+    "entity": {
+        "select": {
+            "speaker": {
+                "name": "Speaker"
+            }
+        },
+        "switch": {
+            "keep_playing": {
+                "name": "Keep playing"
+            }
+        }
+    },
+    "services": {
+        "remove_from_queue": {
+            "name": "Remove from queue",
+            "description": "Removes an upcoming item from the NRK Radio queue.",
+            "fields": {
+                "position": {
+                    "name": "Position",
+                    "description": "Index in the queue attribute (0 is the first item)."
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,72 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "NRK Radio",
+                "description": "Velg høyttalerne NRK kan spille på, og favorittene dine. Favoritter blir knapper med ett trykk og vises først i mediebiblioteket.",
+                "data": {
+                    "speakers": "Høyttalere",
+                    "shows": "Favorittserier og -podkaster",
+                    "channels": "Favoritt-direktekanaler"
+                },
+                "data_description": {
+                    "shows": "Lenke fra radio.nrk.no eller en id, f.eks. https://radio.nrk.no/serie/nyhetsmorgen eller dagsnytt_atten",
+                    "channels": "Neste/forrige blar gjennom disse når direkteradio spiller."
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Fikk ikke kontakt med NRK.",
+            "unknown_show": "NRK har ingen serie eller podkast med den id-en.",
+            "no_speakers": "Velg minst én høyttaler."
+        },
+        "abort": {
+            "single_instance_allowed": "NRK Radio er allerede satt opp."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "NRK Radio",
+                "data": {
+                    "speakers": "Høyttalere",
+                    "shows": "Favorittserier og -podkaster",
+                    "channels": "Favoritt-direktekanaler"
+                },
+                "data_description": {
+                    "shows": "Lenke fra radio.nrk.no eller en id, f.eks. https://radio.nrk.no/serie/nyhetsmorgen eller dagsnytt_atten",
+                    "channels": "Neste/forrige blar gjennom disse når direkteradio spiller."
+                }
+            }
+        },
+        "error": {
+            "cannot_connect": "Fikk ikke kontakt med NRK.",
+            "unknown_show": "NRK har ingen serie eller podkast med den id-en.",
+            "no_speakers": "Velg minst én høyttaler."
+        }
+    },
+    "entity": {
+        "select": {
+            "speaker": {
+                "name": "Høyttaler"
+            }
+        },
+        "switch": {
+            "keep_playing": {
+                "name": "Fortsett å spille"
+            }
+        }
+    },
+    "services": {
+        "remove_from_queue": {
+            "name": "Fjern fra kø",
+            "description": "Fjerner et kommende element fra NRK Radio-køen.",
+            "fields": {
+                "position": {
+                    "name": "Posisjon",
+                    "description": "Indeks i queue-attributtet (0 er første element)."
+                }
+            }
+        }
+    }
+}
