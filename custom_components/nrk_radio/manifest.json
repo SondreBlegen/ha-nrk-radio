@@ -1,4 +1,4 @@
-﻿{
+{
     "domain": "nrk_radio",
     "name": "NRK Radio",
     "after_dependencies": ["cast"],
@@ -12,5 +12,5 @@
     "loggers": ["custom_components.nrk_radio"],
     "requirements": [],
     "single_config_entry": true,
-    "version": "0.2.1"
+    "version": "0.2.2"
 }

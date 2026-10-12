@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from pathlib import Path
 
 from homeassistant import config_entries
 from homeassistant.components import media_source
@@ -331,6 +332,14 @@ async def test_card_is_served(hass: HomeAssistant, setup, hass_client) -> None:
     resp = await client.get("/nrk_radio/nrk-radio-card.js")
     assert resp.status == 200
     assert "customElements.define(\"nrk-radio-card\"" in await resp.text()
+
+
+def test_no_byte_order_marks() -> None:
+    """HA parses manifest.json with orjson, which rejects a UTF-8 BOM."""
+    root = Path(__file__).parent.parent / "custom_components" / "nrk_radio"
+    for path in root.rglob("*"):
+        if path.suffix in (".json", ".py", ".js", ".yaml"):
+            assert not path.read_bytes().startswith(b"\xef\xbb\xbf"), path
 
 
 async def test_unload(hass: HomeAssistant, setup) -> None:
