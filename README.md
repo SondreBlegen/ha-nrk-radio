@@ -27,23 +27,49 @@ Plus the NRK library in HA's **Media** panel for any speaker, and Assist:
 - Live radio never ends, so it always replaces the queue; next/previous then
   flip between your favourite channels.
 
+## Music Assistant
+
+From v0.4 the card plays through [Music Assistant](https://music-assistant.io):
+Music Assistant owns the players, the queue and keep-playing (its *Autoplay*), and
+the card works on anything Music Assistant can play: NRK, Spotify, YouTube Music...
+
+NRK reaches Music Assistant through the provider in `music_assistant/nrk_radio`.
+Music Assistant has no way to install outside providers yet, so it is copied into
+the add-on container and the add-on restarted:
+
+```bash
+docker cp music_assistant/nrk_radio addon_d5369777_music_assistant:/app/venv/lib/python3.14/site-packages/music_assistant/providers/
+docker restart addon_d5369777_music_assistant
+```
+
+Then add **NRK Radio** under Music Assistant → Settings → Providers. A Music Assistant
+update replaces the container, so repeat the copy after updating until the provider
+is part of Music Assistant itself.
+
+Autoplay continues a show with its next episode: part 2 after part 1 for radio
+dramas, the next *newer* episode for news and podcasts.
+
 ## The card
 
 Loaded automatically by the integration; no resource to add.
 
 ```yaml
 type: custom:nrk-radio-card
-show: series/doedens-budbaerer     # lock to one series or podcast
-speaker: media_player.kitchen      # optional: always play here (else a dropdown)
-episodes: 5                        # optional: rows shown before "Show all"
+show: podcast/fantorangens_vitseshow   # an NRK show (series/<id> for radio series)
+player: media_player.kitchen_display   # a Music Assistant player (else a dropdown)
+episodes: 5                            # rows shown before "Show all"
 ```
 
-Leave out `show` and the card becomes a library browser with search.
-Episode rows show **▶** when nothing is playing and **add to queue** when
-something is. Queued rows show their place and an **×** to remove them.
+`uri:` takes any Music Assistant item instead of `show:`, for example
+`spotify://playlist/<id>`. Leave both out and the card becomes a browser: search,
+plus every Music Assistant provider.
 
-`show` takes the id from a radio.nrk.no link: `radio.nrk.no/serie/nyhetsmorgen`
-is `series/nyhetsmorgen`, and `radio.nrk.no/podkast/dagsnytt_atten` is
+Rows show **▶** when nothing is playing and **add to queue** when something is.
+Queued rows show their place and an **×** to remove them. Queued episodes play
+in turn; when the queue is done, playback stops unless *keep playing* is on.
+
+`show` takes the id from a radio.nrk.no link: `radio.nrk.no/serie/doedens-budbaerer`
+is `series/doedens-budbaerer`, and `radio.nrk.no/podkast/dagsnytt_atten` is
 `podcast/dagsnytt_atten`.
 
 ## Scripts and automations

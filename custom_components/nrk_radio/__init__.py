@@ -15,6 +15,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_integration
 
+from . import ma
 from .api import NrkApi
 from .const import CARD_URL, CONF_CHANNELS, CONF_SHOWS, CONF_SPEAKERS, DOMAIN
 from .controller import RadioController
@@ -36,6 +37,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     url = f"{CARD_URL}?v={integration.version}"
     if not await _async_register_resource(hass, url):
         add_extra_js_url(hass, url)
+    ma.async_register(hass)
     return True
 
 

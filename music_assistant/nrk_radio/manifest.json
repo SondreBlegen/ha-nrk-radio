@@ -1,0 +1,14 @@
+{
+  "domain": "nrk_radio",
+  "name": "NRK Radio",
+  "version": "0.1.0",
+  "stage": "beta",
+  "description": "NRK's live channels and its on-demand radio library: series, radio dramas and podcasts from the Norwegian public broadcaster.",
+  "documentation": "https://github.com/sondreblegen/ha-nrk-radio",
+  "requirements": [],
+  "icon": "mdi:radio",
+  "type": "music",
+  "dependencies": [],
+  "config_entries": [],
+  "codeowners": ["@sondreblegen"]
+}

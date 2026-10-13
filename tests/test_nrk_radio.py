@@ -369,8 +369,17 @@ async def test_card_browse_message_is_accepted(hass: HomeAssistant, setup, hass_
     assert msg["result"]["title"] == "Pod"
     assert len(msg["result"]["children"]) == 3
 
+
+async def test_every_bridge_command_the_card_uses_exists(hass: HomeAssistant, setup) -> None:
+    """The card talks to Music Assistant through nrk_radio/ma/*; none may be missing."""
+    import re
+
+    from homeassistant.components.websocket_api import DOMAIN as WS_DOMAIN
+
     card = (Path(__file__).parent.parent / "custom_components/nrk_radio/nrk-radio-card.js").read_text(encoding="utf-8")
-    assert "media_content_type: mediaContentType" in card
+    used = set(re.findall(r'"(nrk_radio/ma/[a-z_]+)"', card))
+    assert used >= {"nrk_radio/ma/item", "nrk_radio/ma/queue", "nrk_radio/ma/play"}
+    assert used <= set(hass.data[WS_DOMAIN])
 
 
 async def test_card_is_a_managed_dashboard_resource(hass: HomeAssistant, setup) -> None:

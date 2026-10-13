@@ -1,22 +1,22 @@
 /*
- * NRK Radio card — the episodes of a series or podcast (or the whole NRK
- * library), with play / add-to-queue per episode, styled like Mushroom tiles.
+ * NRK Radio card: the episodes of a show (or anything in Music Assistant), with
+ * play / add-to-queue per row, styled like Mushroom tiles. Playback, the queue
+ * and keep-playing (Autoplay) are Music Assistant's.
  *
  *   type: custom:nrk-radio-card
- *   show: podcast/fantorangens_vitseshow  # optional: lock to one series/podcast
- *   speaker: media_player.kitchen         # optional: always play here (else a dropdown)
- *   episodes: 5                           # optional: rows shown before "Show all"
- *   entity: media_player.nrk_radio        # optional
- *   title: Vitser                         # optional
+ *   show: podcast/fantorangens_vitseshow      # an NRK show (series/... for radio series)
+ *   uri: spotify://playlist/37i9dQZF1DX...     # ...or any Music Assistant item instead
+ *   player: media_player.kitchen_display      # optional: a Music Assistant player (else a dropdown)
+ *   episodes: 5                               # optional: rows shown before "Show all"
+ *   title: Vitser                             # optional
  *
+ * Without show/uri the card is a browser: search plus every Music Assistant provider.
  * Served and loaded by the nrk_radio integration; no resource to add.
  */
 
 // Own scope: nothing here may collide with other cards' globals.
 (() => {
-const PREFIX = "media-source://nrk_radio";
 const ACTIVE = ["playing", "paused", "buffering"];
-const DATED = /^(\d\d\.\d\d\.\d\d) · (.*)$/;
 
 const STRINGS = {
   en: {
@@ -25,7 +25,7 @@ const STRINGS = {
     play: "Play", queue: "Add to queue", queued: "Queued", remove: "Remove from queue", pause: "Pause",
     resume: "Resume", prev: "Previous", next: "Next", stop: "Stop", loading: "Loading…",
     empty: "Nothing here", noResults: "No results", error: "Could not load from NRK",
-    missing: "NRK Radio is not set up", showAll: (n) => `Show all (${n})`, showFewer: "Show fewer",
+    missing: "No Music Assistant player", showAll: (n) => `Show all (${n})`, showFewer: "Show fewer",
   },
   nb: {
     search: "Søk i NRK Radio", back: "Tilbake", speaker: "Høyttaler", keep: "Fortsett å spille",
@@ -33,7 +33,7 @@ const STRINGS = {
     play: "Spill", queue: "Legg i kø", queued: "I kø", remove: "Fjern fra kø", pause: "Pause",
     resume: "Fortsett", prev: "Forrige", next: "Neste", stop: "Stopp", loading: "Laster…",
     empty: "Ingenting her", noResults: "Ingen treff", error: "Fikk ikke hentet fra NRK",
-    missing: "NRK Radio er ikke satt opp", showAll: (n) => `Vis alle (${n})`, showFewer: "Vis færre",
+    missing: "Ingen Music Assistant-spiller", showAll: (n) => `Vis alle (${n})`, showFewer: "Vis færre",
   },
 };
 
@@ -112,10 +112,6 @@ function svg(path) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"></path></svg>`;
 }
 
-function refOf(mediaContentId) {
-  return mediaContentId.startsWith(PREFIX) ? mediaContentId.slice(PREFIX.length).replace(/^\//, "") : mediaContentId;
-}
-
 function el(tag, cls, text) {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
@@ -136,19 +132,38 @@ function shape(thumbnail, iconPath) {
   return box;
 }
 
+/* "podcast/fantorangens_vitseshow" (NRK shorthand) -> Music Assistant uri. */
+function showUri(show) {
+  if (!show) return null;
+  if (show.includes("://")) return show;
+  const [kind, id] = show.split("/", 2);
+  return `nrk_radio://podcast/${kind === "series" ? "series" : "podcast"}:${id}`;
+}
+
+function storageGet(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+
+function storageSet(key, value) {
+  try { localStorage.setItem(key, value); } catch (e) { /* private mode: just don't remember */ }
+}
+
 class NrkRadioCard extends HTMLElement {
   static getStubConfig() {
-    return { show: "series/nyhetsmorgen" };
+    return { show: "podcast/fantorangens_vitseshow" };
   }
 
   setConfig(config) {
-    this._config = { entity: "media_player.nrk_radio", episodes: 5, ...config };
+    this._config = { episodes: 5, ...config };
+    this._target = showUri(config.uri || config.show);
     this._stack = [];
     this._query = "";
     this._results = null;
     this._expanded = false;
     this._built = false;
-    this._loadedFor = null;
+    this._loaded = false;
+    this._queue = null;
+    this._queueFor = null;
     if (this.shadowRoot) this.shadowRoot.innerHTML = "";
   }
 
@@ -163,10 +178,11 @@ class NrkRadioCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     if (!this._built) this._build();
-    if (this._loadedFor !== this._config.entity && hass.states[this._config.entity]) {
-      this._loadedFor = this._config.entity;
-      this._open(this._config.show ? `${PREFIX}/${this._config.show}` : PREFIX);
+    if (!this._loaded) {
+      this._loaded = true;
+      this._open(this._target ? { uri: this._target } : { path: null });
     }
+    this._refreshQueue();
     this._update();
   }
 
@@ -175,15 +191,25 @@ class NrkRadioCard extends HTMLElement {
     return ["nb", "nn", "no"].some((l) => lang.startsWith(l)) ? STRINGS.nb : STRINGS.en;
   }
 
-  /* Helper entities belong to the same integration; find them rather than assume ids. */
-  _sibling(domain, fallback) {
-    const entities = this._hass.entities || {};
-    const player = entities[this._config.entity];
-    const match = Object.values(entities).find(
-      (e) => e.platform === "nrk_radio" && e.entity_id.startsWith(`${domain}.`) &&
-             (!player || e.device_id === player.device_id),
-    );
-    return match ? match.entity_id : fallback;
+  /* Music Assistant players, for the dropdown. */
+  _players() {
+    return Object.values(this._hass.entities || {})
+      .filter((e) => e.platform === "music_assistant" && e.entity_id.startsWith("media_player."))
+      .map((e) => e.entity_id)
+      .filter((id) => this._hass.states[id])
+      .sort((a, b) => this._name(a).localeCompare(this._name(b)));
+  }
+
+  get _player() {
+    const fixed = this._config.player || this._config.speaker;
+    if (fixed) return fixed;
+    const remembered = storageGet(`nrk-radio-card:${this._target || "browse"}:player`);
+    const players = this._players();
+    return players.includes(remembered) ? remembered : players[0];
+  }
+
+  _name(entityId) {
+    return this._hass.states[entityId]?.attributes.friendly_name || entityId || "";
   }
 
   _build() {
@@ -213,7 +239,7 @@ class NrkRadioCard extends HTMLElement {
           <button class="icon" data-act="clear" title="${t.clear}" hidden>${svg(ICONS.clearQueue)}</button>
           <ha-switch></ha-switch>
         </div>
-        <div class="search" ${this._config.show ? "hidden" : ""}><input type="search" placeholder="${t.search}"></div>
+        <div class="search" ${this._target ? "hidden" : ""}><input type="search" placeholder="${t.search}"></div>
         <div class="divider"></div>
         <div class="nav" hidden>
           <button class="icon" data-act="back" title="${t.back}">${svg(ICONS.back)}</button>
@@ -225,15 +251,18 @@ class NrkRadioCard extends HTMLElement {
     this._el = (sel) => root.querySelector(sel);
 
     this._el(".head .actions").addEventListener("click", (ev) => this._control(ev));
-    this._el('[data-act="clear"]').addEventListener("click", (ev) => this._control(ev));
+    this._el('[data-act="clear"]').addEventListener("click", () => this._ws("nrk_radio/ma/clear_upcoming"));
     this._el(".nav").addEventListener("click", () => this._back());
     this._el(".more").addEventListener("click", () => { this._expanded = !this._expanded; this._render(); });
-    this._el("ha-switch").addEventListener("change", (ev) => {
-      const on = ev.target.checked;
-      this._call("switch", on ? "turn_on" : "turn_off", {}, this._sibling("switch", "switch.nrk_radio_keep_playing"));
+    this._el("ha-switch").addEventListener("change", (ev) =>
+      this._ws("nrk_radio/ma/autoplay", { enabled: ev.target.checked }));
+    this._el(".speaker select").addEventListener("change", (ev) => {
+      storageSet(`nrk-radio-card:${this._target || "browse"}:player`, ev.target.value);
+      this._queue = null;
+      this._queueFor = null;
+      this._refreshQueue();
+      this._update();
     });
-    this._el(".speaker select").addEventListener("change", (ev) =>
-      this._call("select", "select_option", { option: ev.target.value }, this._sibling("select", "select.nrk_radio_speaker")));
     const input = this._el("input[type=search]");
     input.addEventListener("input", () => {
       clearTimeout(this._debounce);
@@ -243,16 +272,26 @@ class NrkRadioCard extends HTMLElement {
     this._built = true;
   }
 
-  async _open(mediaContentId, mediaContentType = "music") {
+  /* Talk to the bridge; commands go to the selected player. */
+  async _ws(type, data = {}, withPlayer = true) {
+    const msg = { type, ...data };
+    if (withPlayer) msg.entity_id = this._player;
+    try {
+      const result = await this._hass.callWS(msg);
+      if (withPlayer) setTimeout(() => this._refreshQueue(true), 300);
+      return result;
+    } catch (err) {
+      this.dispatchEvent(new CustomEvent("hass-notification", {
+        bubbles: true, composed: true, detail: { message: err.message || String(err) },
+      }));
+      throw err;
+    }
+  }
+
+  async _open(target) {
     this._showMessage(this._t.loading);
     try {
-      // HA rejects a content id sent without its content type.
-      const node = await this._hass.callWS({
-        type: "media_player/browse_media",
-        entity_id: this._config.entity,
-        media_content_id: mediaContentId,
-        media_content_type: mediaContentType,
-      });
+      const node = await this._hass.callWS({ type: "nrk_radio/ma/item", ...target });
       this._stack.push(node);
       this._expanded = false;
       this._render();
@@ -281,13 +320,9 @@ class NrkRadioCard extends HTMLElement {
     }
     this._showMessage(this._t.loading);
     try {
-      const res = await this._hass.callWS({
-        type: "media_player/search_media",
-        entity_id: this._config.entity,
-        search_query: query,
-      });
+      const res = await this._hass.callWS({ type: "nrk_radio/ma/search", query });
       if (query !== this._query) return; // a newer search is on its way
-      this._results = { title: `“${query}”`, children: res.result || [] };
+      this._results = { item: { name: `“${query}”` }, children: res.children || [] };
       this._expanded = false;
       this._render();
     } catch (err) {
@@ -295,9 +330,24 @@ class NrkRadioCard extends HTMLElement {
     }
   }
 
+  /* The queue only changes when the player does, so re-read it on player updates. */
+  async _refreshQueue(force = false) {
+    const player = this._player;
+    const state = this._hass?.states[player];
+    if (!state) return;
+    const stamp = `${player}|${state.last_updated}`;
+    if (!force && stamp === this._queueFor) return;
+    this._queueFor = stamp;
+    try {
+      this._queue = await this._hass.callWS({ type: "nrk_radio/ma/queue", entity_id: player });
+    } catch (err) {
+      this._queue = null;
+    }
+    this._update();
+  }
+
   _showMessage(text) {
-    const list = this._el(".list");
-    list.replaceChildren(el("div", "msg", text));
+    this._el(".list").replaceChildren(el("div", "msg", text));
     this._el(".more").hidden = true;
   }
 
@@ -307,15 +357,16 @@ class NrkRadioCard extends HTMLElement {
     if (!node) return;
     const top = this._stack[0];
 
-    // Header shape: the show's art when locked to a show, otherwise the radio icon.
+    // Header shape: the show's art when locked to one, otherwise the radio icon.
     const headShape = this._el(".head .shape");
-    if (this._config.show && top.thumbnail && !headShape.querySelector("img")) {
-      headShape.replaceWith(shape(top.thumbnail));
+    if (this._target && top.item.image && !headShape.querySelector("img")) {
+      headShape.replaceWith(shape(top.item.image));
     }
-    this._el(".head .primary").textContent = this._config.title || (this._config.show ? top.title : "NRK Radio");
+    this._el(".head .primary").textContent =
+      this._config.title || (this._target ? top.item.name : "Music Assistant");
 
     this._el(".nav").hidden = !(this._results || this._stack.length > 1);
-    this._el(".nav .crumb").textContent = node.title;
+    this._el(".nav .crumb").textContent = node.item.name;
 
     const children = node.children || [];
     if (!children.length) {
@@ -327,15 +378,13 @@ class NrkRadioCard extends HTMLElement {
 
     const rows = shown.map((child) => {
       const row = el("div", "tile row" + (child.can_expand ? " expand" : ""));
-      row.dataset.id = child.media_content_id;
-      row.dataset.ref = refOf(child.media_content_id);
-      row.dataset.live = child.media_class === "channel" ? "1" : "";
-      const dated = DATED.exec(child.title);
+      row.dataset.uri = child.uri || "";
+      row.dataset.live = child.media_type === "radio" ? "1" : "";
       const info = el("div", "info");
-      info.append(el("div", "primary", dated ? dated[2] : child.title), el("div", "secondary"));
-      row.dataset.sub = dated ? dated[1] : "";
+      info.append(el("div", "primary", child.name), el("div", "secondary"));
+      row.dataset.sub = child.subtitle || "";
       row.append(
-        shape(child.thumbnail, child.media_class === "channel" ? ICONS.radio : ICONS.folder),
+        shape(child.image, child.media_type === "radio" ? ICONS.radio : ICONS.folder),
         info,
         el("div", "actions"),
       );
@@ -352,63 +401,57 @@ class NrkRadioCard extends HTMLElement {
     this._updateRows();
   }
 
-  _player() {
-    return this._hass.states[this._config.entity];
-  }
-
   _queueInfo() {
-    const player = this._player();
-    const queue = player?.attributes.queue || [];
-    const pos = player?.attributes.queue_position ?? -1;
-    const onOurs = !this._config.speaker || player?.attributes.speaker === this._config.speaker;
-    return { player, queue, pos, active: Boolean(player && ACTIVE.includes(player.state) && onOurs) };
-  }
-
-  _speakerName() {
-    const id = this._config.speaker || this._player()?.attributes.speaker;
-    return this._hass.states[id]?.attributes.friendly_name || id || "";
+    const player = this._hass.states[this._player];
+    const q = this._queue;
+    const items = q?.items || [];
+    const pos = q?.current_index ?? -1;
+    const active = Boolean(player && ACTIVE.includes(player.state) && q && pos >= 0 && items[pos]);
+    return { player, items, pos, active, autoplay: Boolean(q?.autoplay) };
   }
 
   _update() {
-    if (!this._built) return;
+    if (!this._built || !this._hass) return;
     const t = this._t;
-    const { player, queue, pos, active } = this._queueInfo();
-    if (!player) {
-      this._showMessage(t.missing);
+    const { player, items, pos, active, autoplay } = this._queueInfo();
+    if (!this._player || !player) {
+      this._el(".head .secondary").textContent = t.missing;
       return;
     }
 
     // Header: what's playing (and how much is queued), or which speaker we'd play on.
-    const upcoming = active ? queue.length - pos - 1 : 0;
-    const playing = player.attributes.media_title || "";
+    const upcoming = active ? items.length - pos - 1 : 0;
+    const playing = player.attributes.media_title || items[pos]?.name || "";
     this._el(".head .secondary").textContent = active
       ? `${player.state === "playing" ? "▶" : "❚❚"} ${playing}` + (upcoming > 0 ? ` · ${t.queuedN(upcoming)}` : "")
-      : this._speakerName();
+      : this._name(this._player);
     for (const act of ["prev", "next", "stop"]) this._el(`[data-act="${act}"]`).hidden = !active;
     const pp = this._el('[data-act="playpause"]');
     pp.innerHTML = svg(active && player.state === "playing" ? ICONS.pause : ICONS.play);
     pp.title = active && player.state === "playing" ? t.pause : t.play;
-    pp.hidden = !active && !this._config.show; // idle + locked show: one tap plays it
+    pp.hidden = !active && !this._target; // idle + locked show: one tap plays it
 
-    // Speaker: fixed by config, or a dropdown over the integration's select.
+    // Speaker: fixed by config, or a dropdown of Music Assistant players.
     const tile = this._el(".speaker");
-    tile.hidden = Boolean(this._config.speaker);
+    tile.hidden = Boolean(this._config.player || this._config.speaker);
     if (!tile.hidden) {
-      const sel = this._hass.states[this._sibling("select", "select.nrk_radio_speaker")];
       const box = tile.querySelector("select");
-      const options = sel?.attributes.options || [];
-      if (box.dataset.opts !== options.join("|")) {
-        box.replaceChildren(...options.map((o) => el("option", null, o)));
-        box.dataset.opts = options.join("|");
+      const players = this._players();
+      if (box.dataset.opts !== players.join("|")) {
+        box.replaceChildren(...players.map((id) => {
+          const opt = el("option", null, this._name(id));
+          opt.value = id;
+          return opt;
+        }));
+        box.dataset.opts = players.join("|");
       }
-      if (sel && box.value !== sel.state) box.value = sel.state;
+      if (box.value !== this._player) box.value = this._player;
     }
 
-    const keep = this._hass.states[this._sibling("switch", "switch.nrk_radio_keep_playing")];
-    this._el("ha-switch").checked = keep?.state === "on";
+    this._el("ha-switch").checked = autoplay;
     this._el('[data-act="clear"]').hidden = upcoming <= 0;
     this._el(".keep .secondary").textContent =
-      upcoming > 0 ? `${t.next}: ${queue[pos + 1].title}` + (upcoming > 1 ? ` (+${upcoming - 1})` : "") : t.keepHint;
+      upcoming > 0 ? `${t.next}: ${items[pos + 1].name}` + (upcoming > 1 ? ` (+${upcoming - 1})` : "") : t.keepHint;
 
     this._updateRows();
   }
@@ -417,16 +460,16 @@ class NrkRadioCard extends HTMLElement {
     const list = this._el(".list");
     if (!list || !this._hass) return;
     const t = this._t;
-    const { player, queue, pos, active } = this._queueInfo();
-    const current = active && queue[pos] ? queue[pos].id : null;
+    const { player, items, pos, active } = this._queueInfo();
+    const current = active ? items[pos].uri : null;
     const queued = new Map();
-    queue.forEach((item, i) => { if (i > pos) queued.set(item.id, i); });
+    items.forEach((item, i) => { if (i > pos && item.uri && !queued.has(item.uri)) queued.set(item.uri, i); });
 
     for (const row of list.querySelectorAll(".row")) {
       const child = row._child;
-      const ref = row.dataset.ref;
-      const isCurrent = ref === current;
-      const queuePos = queued.get(ref);
+      const uri = row.dataset.uri;
+      const isCurrent = Boolean(uri) && uri === current;
+      const queuePos = uri ? queued.get(uri) : undefined;
       // Shows are expandable *and* playable: they get the button, the row opens them.
       let state;
       if (!child.can_play) state = "none";
@@ -460,53 +503,45 @@ class NrkRadioCard extends HTMLElement {
   _rowClick(ev) {
     const row = ev.target.closest(".row");
     if (!row) return;
+    const child = row._child;
     const button = ev.target.closest("button");
     if (!button) {
-      if (row._child.can_expand) {
+      if (child.can_expand) {
         this._results = null;
         this._el("input[type=search]").value = "";
-        this._open(row.dataset.id, row._child.media_content_type || "music");
+        this._open(child.uri ? { uri: child.uri } : { path: child.path });
       }
       return;
     }
     const act = button.dataset.act;
-    if (act === "play") this._play(row.dataset.id);
-    else if (act === "add") this._play(row.dataset.id, "add");
-    else if (act === "pause") this._call("media_player", "media_pause");
-    else if (act === "resume") this._call("media_player", "media_play");
+    if (act === "play") this._ws("nrk_radio/ma/play", { uri: child.uri, enqueue: "replace" });
+    else if (act === "add") this._ws("nrk_radio/ma/play", { uri: child.uri, enqueue: "add" });
+    else if (act === "pause") this._call("media_pause");
+    else if (act === "resume") this._call("media_play");
     else if (act === "remove") {
-      const { queue, pos } = this._queueInfo();
-      const index = queue.findIndex((item, i) => i > pos && item.id === row.dataset.ref);
-      if (index > pos) this._call("nrk_radio", "remove_from_queue", { position: index });
+      const { items, pos } = this._queueInfo();
+      const item = items.find((it, i) => i > pos && it.uri === child.uri);
+      if (item) this._ws("nrk_radio/ma/remove", { queue_item_id: item.queue_item_id });
     }
-  }
-
-  _play(mediaContentId, enqueue) {
-    const data = {
-      media_content_id: mediaContentId,
-      media_content_type: "music",
-      extra: this._config.speaker ? { speaker: this._config.speaker } : {},
-    };
-    if (enqueue) data.enqueue = enqueue;
-    this._call("media_player", "play_media", data);
   }
 
   _control(ev) {
     const act = ev.target.closest("button")?.dataset.act;
     if (act === "playpause" && !this._queueInfo().active) {
-      // Nothing of ours playing: start the show (newest episode, or episode 1 of a serial).
-      this._play(`${PREFIX}/${this._config.show}`);
+      // Nothing playing: start the first row (newest episode, or part 1 of a serial).
+      const first = this._stack[0]?.children?.find((c) => c.can_play);
+      if (first) this._ws("nrk_radio/ma/play", { uri: first.uri, enqueue: "replace" });
       return;
     }
     const service = {
       prev: "media_previous_track", next: "media_next_track", stop: "media_stop",
-      playpause: "media_play_pause", clear: "clear_playlist",
+      playpause: "media_play_pause",
     }[act];
-    if (service) this._call("media_player", service);
+    if (service) this._call(service);
   }
 
-  _call(domain, service, data = {}, entityId = this._config.entity) {
-    this._hass.callService(domain, service, data, { entity_id: entityId }).catch((err) => {
+  _call(service) {
+    this._hass.callService("media_player", service, {}, { entity_id: this._player }).catch((err) => {
       this.dispatchEvent(new CustomEvent("hass-notification", {
         bubbles: true, composed: true, detail: { message: err.message || String(err) },
       }));
@@ -520,7 +555,7 @@ if (!customElements.get("nrk-radio-card")) {
   window.customCards.push({
     type: "nrk-radio-card",
     name: "NRK Radio",
-    description: "Episodes of an NRK series or podcast, with play and queue buttons.",
+    description: "Episodes of a show (or anything in Music Assistant), with play and queue buttons.",
     preview: false,
   });
 }

@@ -69,57 +69,64 @@
 </head>
 <body>
 <div class="phone">
-  <h1>🧸 Kids bedroom</h1>
+  <h1>🧸 Kids' room</h1>
   <ha-card><div class="mush"><div class="ic">💡</div><div><div class="p">Room dimmer</div><div class="s">Off</div></div></div></ha-card>
   <ha-card><div class="mush"><div class="ic">🔈</div><div><div class="p">Speaker</div><div class="s">Off</div></div></div></ha-card>
   <ha-card><div class="mush"><div class="ic">🚪</div><div><div class="p">Door closed</div><div class="s">Mon 12 Oct, 20:33 · 14 minutes ago</div></div></div></ha-card>
   <div id="slot"></div>
 </div>
 <script>
+  // A fake Music Assistant behind the card's bridge (nrk_radio/ma/*), fed with real NRK data.
   const P = "media-source://nrk_radio";
-  const SHOW = "podcast/fantorangens_vitseshow";
-  const eps = FIXTURES.browse[`${P}/${SHOW}`].children;
-  const sim = { state: "idle", queue: [], pos: 0, keep: false };
+  const SHOW_URI = "nrk_radio://podcast/podcast:fantorangens_vitseshow";
+  const src = FIXTURES.browse[`${P}/podcast/fantorangens_vitseshow`];
+  const rows = src.children.map((c) => {
+    const m = /^(\d\d\.\d\d\.\d\d) · (.*)$/.exec(c.title);
+    const id = c.media_content_id.split("/").pop();
+    return { uri: `nrk_radio://podcast_episode/podcast:fantorangens_vitseshow:${id}`, name: m ? m[2] : c.title,
+             subtitle: m ? m[1] : null, image: c.thumbnail, media_type: "podcast_episode", can_play: true, can_expand: false };
+  });
+  const sim = { state: "idle", items: [], pos: 0, autoplay: false, n: 0 };
   if (new URLSearchParams(location.search).get("state") === "playing") {
-    sim.state = "playing"; sim.queue = [refOf(eps[0]), refOf(eps[2]), refOf(eps[3])]; sim.keep = true;
+    sim.state = "playing"; sim.autoplay = true;
+    sim.items = [rows[0], rows[2], rows[3]].map((r) => ({ queue_item_id: `q${sim.n++}`, uri: r.uri, name: r.name }));
   }
-  function refOf(c) { return c.media_content_id.replace(P + "/", ""); }
-  const title = (ref) => (eps.find((c) => refOf(c) === ref) || { title: ref }).title.replace(/^\d\d\.\d\d\.\d\d · /, "");
+  const PLAYER = "media_player.kids_speaker";
+  let stamp = 0;
   function hass() {
+    stamp++;
     return {
       language: "nb", locale: { language: "nb" },
-      entities: {
-        "media_player.nrk_radio": { entity_id: "media_player.nrk_radio", platform: "nrk_radio", device_id: "d" },
-        "switch.nrk_radio_keep_playing": { entity_id: "switch.nrk_radio_keep_playing", platform: "nrk_radio", device_id: "d" },
-        "select.nrk_radio_speaker": { entity_id: "select.nrk_radio_speaker", platform: "nrk_radio", device_id: "d" },
-      },
+      entities: { [PLAYER]: { entity_id: PLAYER, platform: "music_assistant" } },
       states: {
-        "media_player.nrk_radio": { state: sim.state, attributes: { speaker: "media_player.livingroom_speaker",
-          queue: sim.queue.map((r) => ({ id: r, title: title(r) })), queue_position: sim.queue.length ? sim.pos : null,
-          media_title: sim.queue.length ? title(sim.queue[sim.pos]) : undefined } },
-        "media_player.livingroom_speaker": { state: "off", attributes: { friendly_name: "Kids speaker" } },
-        "switch.nrk_radio_keep_playing": { state: sim.keep ? "on" : "off", attributes: {} },
-        "select.nrk_radio_speaker": { state: "Kids speaker", attributes: { options: ["Kids speaker"] } },
+        [PLAYER]: { state: sim.state, last_updated: String(stamp), attributes: { friendly_name: "Kids speaker",
+          media_title: sim.items[sim.pos]?.name } },
       },
       callWS: async (m) => {
-        // Like HA 2026.9: an id without its type is invalid_format.
-        if (m.type === "media_player/browse_media" && !m.media_content_type) throw new Error("invalid_format");
-        return m.type === "media_player/browse_media" ? FIXTURES.browse[m.media_content_id] : { result: [] };
+        if (m.type === "nrk_radio/ma/item") return { item: { name: src.title, image: src.thumbnail, uri: SHOW_URI }, children: rows };
+        if (m.type === "nrk_radio/ma/queue")
+          return { queue_id: "q", state: sim.state, current_index: sim.items.length ? sim.pos : null, autoplay: sim.autoplay, items: sim.items };
+        if (m.type === "nrk_radio/ma/play") {
+          const r = rows.find((x) => x.uri === m.uri);
+          const item = { queue_item_id: `q${sim.n++}`, uri: m.uri, name: r.name };
+          if (m.enqueue === "add") sim.items.push(item); else { sim.items = [item]; sim.pos = 0; sim.state = "playing"; }
+        } else if (m.type === "nrk_radio/ma/remove") sim.items = sim.items.filter((i) => i.queue_item_id !== m.queue_item_id);
+        else if (m.type === "nrk_radio/ma/clear_upcoming") sim.items = sim.items.slice(0, sim.pos + 1);
+        else if (m.type === "nrk_radio/ma/autoplay") sim.autoplay = m.enabled;
+        setTimeout(() => { card.hass = hass(); }, 0);
+        return null;
       },
-      callService: async (d, s, data) => {
-        const ref = data.media_content_id && data.media_content_id.replace(P + "/", "");
-        if (s === "play_media" && data.enqueue) sim.queue.push(ref);
-        else if (s === "play_media") { sim.queue = [ref.startsWith("podcast/") ? refOf(eps[0]) : ref]; sim.pos = 0; sim.state = "playing"; }
-        else if (s === "media_play_pause") sim.state = sim.state === "playing" ? "paused" : "playing";
+      callService: async (d, s) => {
+        if (s === "media_play_pause") sim.state = sim.state === "playing" ? "paused" : "playing";
+        else if (s === "media_pause") sim.state = "paused";
+        else if (s === "media_play") sim.state = "playing";
         else if (s === "media_stop") sim.state = "idle";
-        else if (s === "turn_on" || s === "turn_off") sim.keep = s === "turn_on";
-        else if (s === "clear_playlist") sim.queue = sim.queue.slice(0, sim.pos + 1);
         card.hass = hass();
       },
     };
   }
   const card = document.createElement("nrk-radio-card");
-  card.setConfig({ show: SHOW, speaker: "media_player.livingroom_speaker" });
+  card.setConfig({ show: "podcast/fantorangens_vitseshow", player: PLAYER });
   document.getElementById("slot").appendChild(card);
   card.hass = hass();
 </script>

@@ -1,7 +1,7 @@
 {
     "domain": "nrk_radio",
     "name": "NRK Radio",
-    "after_dependencies": ["cast"],
+    "after_dependencies": ["cast", "music_assistant"],
     "codeowners": ["@sondreblegen"],
     "config_flow": true,
     "dependencies": ["frontend", "http", "lovelace", "media_source"],
@@ -12,5 +12,5 @@
     "loggers": ["custom_components.nrk_radio"],
     "requirements": [],
     "single_config_entry": true,
-    "version": "0.3.3"
+    "version": "0.4.0"
 }
