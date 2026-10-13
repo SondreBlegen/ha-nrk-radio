@@ -28,8 +28,10 @@ from homeassistant.components.media_player import (
 )
 from homeassistant.const import (
     ATTR_ENTITY_ID,
+    STATE_BUFFERING,
     STATE_IDLE,
     STATE_OFF,
+    STATE_PAUSED,
     STATE_PLAYING,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
@@ -48,6 +50,8 @@ _LOGGER = logging.getLogger(__name__)
 _CAST_MUSIC_METADATA = 3
 # How many episodes of a show we look through to find "the next one".
 _SHOW_WINDOW = 100
+# Only these report a position that means anything; idle resets it to 0.
+_PROGRESS_STATES = (STATE_PLAYING, STATE_PAUSED, STATE_BUFFERING)
 
 
 @dataclass(frozen=True)
@@ -438,15 +442,8 @@ class RadioController:
     @callback
     def _async_speaker_changed(self, event: Event[EventStateChangedData]) -> None:
         old, new = event.data["old_state"], event.data["new_state"]
-        if new is not None and self._sent_url and new.attributes.get(ATTR_MEDIA_CONTENT_ID) == self._sent_url:
-            position = new.attributes.get(ATTR_MEDIA_POSITION)
-            updated_at = new.attributes.get(ATTR_MEDIA_POSITION_UPDATED_AT)
-            if position is not None and updated_at is not None:
-                self._last_progress = (
-                    float(position),
-                    updated_at,
-                    float(new.attributes.get(ATTR_MEDIA_DURATION) or 0),
-                )
+        # Judge the end before taking anything from the new state: once idle,
+        # Cast reports the position reset to 0, which would read as "stopped".
         if (
             old is not None
             and new is not None
@@ -455,6 +452,20 @@ class RadioController:
             and self._episode_finished(old)
         ):
             self.hass.async_create_task(self._async_advance(), "nrk_radio advance")
+        elif (
+            new is not None
+            and new.state in _PROGRESS_STATES
+            and self._sent_url
+            and new.attributes.get(ATTR_MEDIA_CONTENT_ID) == self._sent_url
+        ):
+            position = new.attributes.get(ATTR_MEDIA_POSITION)
+            updated_at = new.attributes.get(ATTR_MEDIA_POSITION_UPDATED_AT)
+            if position is not None and updated_at is not None:
+                self._last_progress = (
+                    float(position),
+                    updated_at,
+                    float(new.attributes.get(ATTR_MEDIA_DURATION) or 0),
+                )
         self.notify()
 
     def _episode_finished(self, old: State) -> bool:

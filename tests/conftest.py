@@ -196,7 +196,7 @@ class FakeSpeakers:
                 media_duration=None if live else EPISODE_LENGTH,
             )
         elif service == "media_stop":
-            self.set(entity_id, "idle")
+            self.idle(entity_id)
         elif service == "media_pause":
             self.set(entity_id, "paused")
         elif service == "media_play":
@@ -205,11 +205,23 @@ class FakeSpeakers:
     def played(self) -> list[tuple[str, str]]:
         return [(e, d["media_content_id"]) for e, s, d in self.calls if s == "play_media"]
 
-    def finish(self, entity_id: str = KITCHEN) -> None:
-        """Run the current episode to its end."""
-        self.set(entity_id, "playing", media_position=EPISODE_LENGTH - 2,
-                 media_position_updated_at=dt_util.utcnow())
-        self.set(entity_id, "idle")
+    def idle(self, entity_id: str = KITCHEN) -> None:
+        """Go idle the way Cast does: it still reports a position, reset to 0."""
+        self.set(entity_id, "idle", media_position=0, media_position_updated_at=dt_util.utcnow())
+
+    def finish(self, entity_id: str = KITCHEN, played_from_start: bool = False) -> None:
+        """Run the current episode to its end.
+
+        played_from_start: Cast sent no position update since the episode
+        began (what real Cast does), so only elapsed time says it's done.
+        """
+        if played_from_start:
+            self.set(entity_id, "playing", media_position=0,
+                     media_position_updated_at=dt_util.utcnow() - timedelta(seconds=EPISODE_LENGTH))
+        else:
+            self.set(entity_id, "playing", media_position=EPISODE_LENGTH - 2,
+                     media_position_updated_at=dt_util.utcnow())
+        self.idle(entity_id)
 
 
 @pytest.fixture

@@ -186,6 +186,34 @@ async def test_queue_plays_through_then_stops(hass: HomeAssistant, setup, speake
     assert hass.states.get(PLAYER).state == "idle"
 
 
+async def test_queued_episode_plays_when_cast_resets_position(hass: HomeAssistant, setup, speakers) -> None:
+    """Replays 2026-10-13: Cast sends no position updates mid-episode and reports
+    position 0 once idle. The queued episode must still start; keep playing is off."""
+    await _play(hass, "episode/podcast/pod/e1")
+    await _play(hass, "episode/podcast/pod/e2", enqueue="add")
+    speakers.finish(played_from_start=True)
+    await hass.async_block_till_done()
+    assert speakers.played()[-1] == (KITCHEN, "https://pod/e2.mp3")
+
+    # Queue done, keep playing off: stop there.
+    speakers.finish(played_from_start=True)
+    await hass.async_block_till_done()
+    assert len(speakers.played()) == 2
+
+
+async def test_keep_playing_runs_the_queue_first(hass: HomeAssistant, setup, speakers) -> None:
+    """Queue first, then carry on with the show from the last queued episode."""
+    await _service(hass, "switch", "turn_on", entity_id=KEEP)
+    await _play(hass, "episode/series/drama/d1")
+    await _play(hass, "episode/podcast/pod/e1", enqueue="add")
+    speakers.finish(played_from_start=True)
+    await hass.async_block_till_done()
+    assert speakers.played()[-1] == (KITCHEN, "https://pod/e1.mp3")  # the queue first
+    speakers.finish(played_from_start=True)
+    await hass.async_block_till_done()
+    assert speakers.played()[-1] == (KITCHEN, "https://pod/e2.mp3")  # then the show goes on
+
+
 async def test_keep_playing_continues_with_the_show(hass: HomeAssistant, setup, speakers) -> None:
     await _service(hass, "switch", "turn_on", entity_id=KEEP)
     await _play(hass, "episode/series/drama/d1")
@@ -206,7 +234,7 @@ async def test_stopping_mid_episode_does_not_advance(hass: HomeAssistant, setup,
     speakers.set(KITCHEN, "playing", media_position=100, media_position_updated_at=dt_util.utcnow())
     await hass.async_block_till_done()
     await _service(hass, "media_player", "media_stop", entity_id=PLAYER)
-    speakers.set(KITCHEN, "idle")  # or stopped from the Google Home app
+    speakers.idle(KITCHEN)  # or stopped from the Google Home app
     await hass.async_block_till_done()
     assert speakers.played() == [(KITCHEN, "https://pod/e1.mp3")]
 
