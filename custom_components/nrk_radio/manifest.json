@@ -4,7 +4,7 @@
     "after_dependencies": ["cast"],
     "codeowners": ["@sondreblegen"],
     "config_flow": true,
-    "dependencies": ["frontend", "http", "media_source"],
+    "dependencies": ["frontend", "http", "lovelace", "media_source"],
     "documentation": "https://github.com/sondreblegen/ha-nrk-radio",
     "integration_type": "service",
     "iot_class": "cloud_polling",
@@ -12,5 +12,5 @@
     "loggers": ["custom_components.nrk_radio"],
     "requirements": [],
     "single_config_entry": true,
-    "version": "0.3.1"
+    "version": "0.3.2"
 }

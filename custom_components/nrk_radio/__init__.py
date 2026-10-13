@@ -6,6 +6,7 @@ from pathlib import Path
 
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -32,7 +33,29 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         [StaticPathConfig(CARD_URL, str(Path(__file__).parent / "nrk-radio-card.js"), False)]
     )
     # The version busts browser caches when the card changes.
-    add_extra_js_url(hass, f"{CARD_URL}?v={integration.version}")
+    url = f"{CARD_URL}?v={integration.version}"
+    if not await _async_register_resource(hass, url):
+        add_extra_js_url(hass, url)
+    return True
+
+
+async def _async_register_resource(hass: HomeAssistant, url: str) -> bool:
+    """Load the card as a dashboard resource, as HACS cards are.
+
+    Dashboards fetch their resources on every load, whereas extra scripts are
+    baked into the start page that the companion apps keep for days. Returns
+    False when resources are YAML-managed and can't be written.
+    """
+    resources = getattr(hass.data.get(LOVELACE_DATA), "resources", None)
+    if resources is None or not hasattr(resources, "async_create_item"):
+        return False
+    await resources.async_get_info()  # loads the collection from storage
+    for item in resources.async_items():
+        if item["url"].split("?", 1)[0] == CARD_URL:
+            if item["url"] != url:
+                await resources.async_update_item(item["id"], {"res_type": "module", "url": url})
+            return True
+    await resources.async_create_item({"res_type": "module", "url": url})
     return True
 
 

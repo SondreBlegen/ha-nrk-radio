@@ -345,6 +345,23 @@ async def test_card_browse_message_is_accepted(hass: HomeAssistant, setup, hass_
     assert "media_content_type: mediaContentType" in card
 
 
+async def test_card_is_a_managed_dashboard_resource(hass: HomeAssistant, setup) -> None:
+    """Registered once, version kept current, other resources untouched."""
+    from homeassistant.components.lovelace.const import LOVELACE_DATA
+
+    from custom_components.nrk_radio import _async_register_resource
+
+    resources = hass.data[LOVELACE_DATA].resources
+    ours = [r for r in resources.async_items() if r["url"].startswith("/nrk_radio/")]
+    assert len(ours) == 1 and ours[0]["type"] == "module"  # stored as "type"
+    assert ours[0]["url"].startswith("/nrk_radio/nrk-radio-card.js?v=")
+
+    await resources.async_create_item({"res_type": "module", "url": "/hacsfiles/other-card.js"})
+    assert await _async_register_resource(hass, "/nrk_radio/nrk-radio-card.js?v=9.9.9")
+    urls = sorted(r["url"] for r in resources.async_items())
+    assert urls == ["/hacsfiles/other-card.js", "/nrk_radio/nrk-radio-card.js?v=9.9.9"]
+
+
 async def test_card_is_served(hass: HomeAssistant, setup, hass_client) -> None:
     client = await hass_client()
     resp = await client.get("/nrk_radio/nrk-radio-card.js")
