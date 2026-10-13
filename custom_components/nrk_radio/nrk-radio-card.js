@@ -243,13 +243,15 @@ class NrkRadioCard extends HTMLElement {
     this._built = true;
   }
 
-  async _open(mediaContentId) {
+  async _open(mediaContentId, mediaContentType = "music") {
     this._showMessage(this._t.loading);
     try {
+      // HA rejects a content id sent without its content type.
       const node = await this._hass.callWS({
         type: "media_player/browse_media",
         entity_id: this._config.entity,
         media_content_id: mediaContentId,
+        media_content_type: mediaContentType,
       });
       this._stack.push(node);
       this._expanded = false;
@@ -463,7 +465,7 @@ class NrkRadioCard extends HTMLElement {
       if (row._child.can_expand) {
         this._results = null;
         this._el("input[type=search]").value = "";
-        this._open(row.dataset.id);
+        this._open(row.dataset.id, row._child.media_content_type || "music");
       }
       return;
     }

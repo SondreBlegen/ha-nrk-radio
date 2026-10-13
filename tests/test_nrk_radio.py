@@ -327,6 +327,24 @@ async def test_episode_pages_stay_within_nrks_limit(hass: HomeAssistant, setup, 
     assert sizes and max(sizes) <= 50
 
 
+async def test_card_browse_message_is_accepted(hass: HomeAssistant, setup, hass_ws_client) -> None:
+    """The exact websocket message the card sends; HA wants the type with the id."""
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({
+        "type": "media_player/browse_media",
+        "entity_id": PLAYER,
+        "media_content_id": "media-source://nrk_radio/podcast/pod",
+        "media_content_type": "music",
+    })
+    msg = await client.receive_json()
+    assert msg["success"], msg
+    assert msg["result"]["title"] == "Pod"
+    assert len(msg["result"]["children"]) == 3
+
+    card = (Path(__file__).parent.parent / "custom_components/nrk_radio/nrk-radio-card.js").read_text(encoding="utf-8")
+    assert "media_content_type: mediaContentType" in card
+
+
 async def test_card_is_served(hass: HomeAssistant, setup, hass_client) -> None:
     client = await hass_client()
     resp = await client.get("/nrk_radio/nrk-radio-card.js")

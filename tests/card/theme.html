@@ -101,7 +101,11 @@
         "switch.nrk_radio_keep_playing": { state: sim.keep ? "on" : "off", attributes: {} },
         "select.nrk_radio_speaker": { state: "Kids speaker", attributes: { options: ["Kids speaker"] } },
       },
-      callWS: async (m) => m.type === "media_player/browse_media" ? FIXTURES.browse[m.media_content_id] : { result: [] },
+      callWS: async (m) => {
+        // Like HA 2026.9: an id without its type is invalid_format.
+        if (m.type === "media_player/browse_media" && !m.media_content_type) throw new Error("invalid_format");
+        return m.type === "media_player/browse_media" ? FIXTURES.browse[m.media_content_id] : { result: [] };
+      },
       callService: async (d, s, data) => {
         const ref = data.media_content_id && data.media_content_id.replace(P + "/", "");
         if (s === "play_media" && data.enqueue) sim.queue.push(ref);

@@ -80,6 +80,8 @@
       callWS: async (msg) => {
         await new Promise((r) => setTimeout(r, 150));
         if (msg.type === "media_player/browse_media") {
+          // Like HA 2026.9: an id without its type is invalid_format.
+          if (!msg.media_content_type) throw new Error("invalid_format: media_content_type and media_content_id must be provided together");
           const node = FIXTURES.browse[msg.media_content_id];
           if (!node) throw new Error("not captured: " + msg.media_content_id);
           return node;
