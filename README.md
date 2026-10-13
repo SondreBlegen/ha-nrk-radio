@@ -35,11 +35,12 @@ the card works on anything Music Assistant can play: NRK, Spotify, YouTube Music
 
 NRK reaches Music Assistant through the provider in `music_assistant/nrk_radio`.
 Music Assistant has no way to install outside providers yet, so it is copied into
-the add-on container and the add-on restarted:
+the add-on container and the add-on restarted (on HAOS the container is named
+`addon_…` or `app_…` depending on the Supervisor version; `docker ps` shows it):
 
 ```bash
-docker cp music_assistant/nrk_radio addon_d5369777_music_assistant:/app/venv/lib/python3.14/site-packages/music_assistant/providers/
-docker restart addon_d5369777_music_assistant
+docker cp music_assistant/nrk_radio app_d5369777_music_assistant:/app/venv/lib/python3.14/site-packages/music_assistant/providers/
+docker restart app_d5369777_music_assistant
 ```
 
 Then add **NRK Radio** under Music Assistant → Settings → Providers. A Music Assistant
